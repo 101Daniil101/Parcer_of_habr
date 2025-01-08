@@ -1,0 +1,10 @@
+{
+    "line_with_keywords": "",
+    "numbers_articles": 5,
+    "name_author": true,
+    "time_creation": true,
+    "title_article": true,
+    "numbers_views": true,
+    "all_images": [true, 5], 
+    "text_on_page": [true, 100]
+}
