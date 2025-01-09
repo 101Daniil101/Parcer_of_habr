@@ -1,4 +1,3 @@
-import requests
 from bs4 import BeautifulSoup
 import json
 from BaseParser import BaseParser
@@ -12,47 +11,51 @@ class ArticlesHabrWithKeyword(BaseParser):
         self.numbers_articles = features_output['numbers_articles']
         self.features_output = features_output
 
-    def _check_article(self, block_article):
-        # Улучшить поиск
-        title_article = block_article.find('h2', class_='tm-title tm-title_h2').text
-        set_words_title_article = set(title_article.split())
-        if set_words_title_article & self.keywords:
-            return True
+    def search_in_titles(self, list_soups):
+        for soup in list_soups:
+            title_article = soup.find('h2', class_='tm-title tm-title_h2').text
+            set_words_title_article = set(title_article.split())
+            if set_words_title_article & self.keywords:
+                link_article = soup.find('a', class_='tm-title__link').get('href')
+                self.articles.append(ArticleHabr(link=f"{self.link[0][:16]}{link_article}", features_output=self.features_output, session=self.session))
+            if len(self.articles) >= self.numbers_articles:
+                return True
         else:
             return False
-        
-    def search_in_titles(self):
-        ...
 
-    def get_request(self):
-        number_page = 0
-        numbers_articles = 0
+    def find_objects(self, soup, common_feature):
+        list_block_articles = soup.find_all(attrs=common_feature)
+        return list_block_articles
 
-        while numbers_articles < self.numbers_articles:
-            number_page += 1
+    def get_request(self, *new_link):
+        self.link = new_link
 
-            if number_page < 50:
-                response = self.session.get(f"{self.link}/ru/articles/page{number_page}/", headers=self.headers)
-                if response.status_code == 200:
-                    response = response.text
-                    soup = BeautifulSoup(response, 'lxml')
-                    list_block_articles = soup.find_all('div', class_='tm-article-snippet tm-article-snippet')
+        for link in self.link:
+            response = self.session.get(link, headers=self.headers)
+            if response.status_code == 200:
+                response = response.text
+                soup = BeautifulSoup(response, 'lxml')
 
-                    for block_article in list_block_articles:
-                        if numbers_articles < self.numbers_articles:
-
-                            if self._check_article(block_article):
-                                link_article = block_article.find('a', class_='tm-title__link').get('href')
-                                self.articles.append(ArticleHabr(link=f"{self.link}{link_article}", features_output=self.features_output, session=self.session))
-                                numbers_articles += 1
-                        else:
-                            break
-                    else:
-                        continue
+                list_block_articles = self.find_objects(soup, {"class": "tm-article-snippet tm-article-snippet"})
+                if self.search_in_titles(list_block_articles):
                     break
+
             else:
-                self.numbers_articles = numbers_articles
-                print(f"К сожалению, на сайте habr.com нашли только {numbers_articles} статей, содержащих ваши ключевые слова")
+                print(f"Ошибка: {response.status_code}")
+        else:
+            self.numbers_articles = len(self.articles)
+            print(f"К сожалению, на сайте habr.com нашли только {self.numbers_articles} статей, содержащих ваши ключевые слова")
+
+    def page_navigation(self, suffix, numbers_page):
+        self.link = set([self.link + f"/{suffix}{number_page}/" for number_page in range(1, numbers_page)])
+
+    def add_to_root_link(self, addition_link):
+        self.link += addition_link
+    
+    def start_search(self):
+        self.add_to_root_link('/ru/articles')
+        self.page_navigation('page', 50)
+        self.get_request(*self.link)
 
     def parsing_all_articles_from_list(self):
         for article in self.articles:
@@ -76,18 +79,17 @@ class ArticlesHabrWithKeyword(BaseParser):
 
         with open(name_file, 'w', encoding='utf=8') as file:
             json.dump(result_data, file, ensure_ascii=False)
-
+    
 
 def main():
-    #Добавь поиск по другим элементам
 
     with open('config.json', encoding="utf-8") as file:
         features_output = json.load(file)
 
     Articles = ArticlesHabrWithKeyword(features_output)
-    Articles.get_request()
+    Articles.start_search()
     Articles.parsing_all_articles_from_list()
-    Articles.save_to_json(name_file='result.json')
+    Articles.save_to_json(name_file='results.json')
 
 if __name__ == '__main__':
     main()
